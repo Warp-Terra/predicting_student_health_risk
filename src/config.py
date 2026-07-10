@@ -16,6 +16,7 @@ SUBMISSION_DIR.mkdir(parents=True, exist_ok=True)
 
 TARGET = "health_condition"
 ID_COL = "id"
+OFFICIAL_METRIC = "balanced_accuracy"
 
 LABEL_MAP = {"fit": 0, "unhealthy": 1, "at-risk": 2}
 INV_LABEL_MAP = {v: k for k, v in LABEL_MAP.items()}

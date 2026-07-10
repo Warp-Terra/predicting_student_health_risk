@@ -1,5 +1,7 @@
 # Phase 1: LightGBM 快速基线
 
+> 历史方案：文中将指标写成 accuracy 是错误的。竞赛官方指标为 Balanced Accuracy，当前实现与结果见 `README_CN.md` 和 `RESULTS.md`。
+
 ## 目标
 
 用 LightGBM 搭建一个端到端的快速基线，完成一次提交，作为后续优化的基准分数。
@@ -63,7 +65,7 @@
 
 ## 评估指标
 
-Kaggle 使用 **accuracy** 作为评估指标。预测结果为三个类别（`fit`、`at-risk`、`unhealthy`）。
+Kaggle 使用 **Balanced Accuracy** 作为评估指标，即三个类别召回率的平均值。预测结果为三个类别（`fit`、`at-risk`、`unhealthy`）。
 
 ## 实施计划
 

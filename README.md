@@ -1,6 +1,6 @@
 # Predicting Student Health Risk
 
-> [Kaggle Playground Series S6E7](https://www.kaggle.com/competitions/playground-series-s6e7) — 3-class classification baseline with LightGBM.
+> [Kaggle Playground Series S6E7](https://www.kaggle.com/competitions/playground-series-s6e7) — balanced-accuracy LightGBM pipeline.
 
 *[中文版本](README_CN.md)*
 
@@ -14,18 +14,20 @@ Predict students' health condition into one of three categories based on lifesty
 | `unhealthy` | Unhealthy (8.4%) |
 | `at-risk` | At risk (85.9%) |
 
-Evaluation metric: **accuracy**.
+Evaluation metric: **balanced accuracy** (the mean recall across the three classes).
 
 ## Project Structure
 
 ```
 predicting_student_health_risk/
 ├── main.py                   # Entry point: full pipeline (data → train → predict)
+├── run_experiment.py         # Reproducible CV, calibration, and artifact runner
 ├── resubmit.py               # Quick re-submit (data → predict only, skip training)
 ├── src/
 │   ├── config.py             # Paths, hyperparameters, feature lists, smoke test flag
 │   ├── data.py               # Data loading & preprocessing (label encoding, categorical encoding)
 │   ├── train.py              # 5-fold StratifiedKFold CV training + full-model training
+│   ├── calibration.py        # Cross-fitted decision calibration
 │   └── predict.py            # Ensemble prediction & submission generation
 ├── specs/                    # Design docs
 │   ├── phase1-lightgbm-baseline.md
@@ -60,14 +62,21 @@ pip install pandas numpy lightgbm scikit-learn
 
 ### Run
 
-**Full pipeline** (train + predict):
+**Best validated pipeline** (train + predict):
 ```bash
 python main.py
 ```
 
+**Named experiment**:
+```bash
+python run_experiment.py --name my_run --iterations 1500 \
+  --weight-power 1 --model-seed 2026 \
+  --early-stop-metric balanced_accuracy
+```
+
 **Smoke test** (10% data, reduced rounds — for rapid iteration):
 ```bash
-python main.py --smoke
+python run_experiment.py --name smoke_run --smoke --iterations 100
 ```
 
 **Re-submit** (skip training, re-use existing models):
@@ -78,7 +87,8 @@ python resubmit.py
 ### Output
 
 - Trained models saved to `models/lgb_fold{1..5}.pkl` and `models/lgb_full.pkl`
-- Submission file saved to `submissions/submission_phase1_v1.csv`
+- Models, OOF probabilities, test probabilities, and metrics are saved under `artifacts/<name>/`
+- Raw and calibrated submissions are saved under `submissions/`
 
 ## Model
 
@@ -87,8 +97,8 @@ python resubmit.py
 | Algorithm | LightGBM (GBDT) |
 | CV Strategy | 5-fold StratifiedKFold |
 | Class Weights | Balanced |
-| Early Stopping | 50 rounds on val logloss |
-| Max Rounds | 1,000 |
+| Early Stopping | 100 rounds on validation balanced accuracy |
+| Max Rounds | 1,500 |
 | Learning Rate | 0.05 |
 
 ### Why LightGBM
@@ -98,29 +108,23 @@ python resubmit.py
 - **Fast** — ~700k rows train in minutes on CPU
 - **Class weight** — directly handles the heavy class imbalance
 
-## CV Results (Phase 1 Baseline)
+## Validated Results
 
 | Metric | Value |
 |--------|-------|
-| CV Accuracy (mean ± std) | ~0.9469 |
-| OOF Accuracy | ~0.9469 |
-| OOF LogLoss | ~0.1643 |
-| Public LB Score | ~0.9487 |
+| Original public score | 0.94868 |
+| Best OOF balanced accuracy | 0.94980 |
+| Best public score | **0.95011** |
+
+See [RESULTS.md](RESULTS.md) for the experiment history and rejected variants.
 
 ## Roadmap
 
 - [x] Phase 1: LightGBM baseline
-  - [x] Data loading & preprocessing
-  - [x] 5-fold StratifiedKFold CV
-  - [x] Full-model training
-  - [x] Kaggle submission
-- [ ] Phase 2: Feature engineering
-  - [ ] Missing value indicators
-  - [ ] Cross / composite features
-  - [ ] Target encoding
-  - [ ] Outlier clipping
-- [ ] Phase 3: Hyperparameter tuning (Optuna)
-- [ ] Phase 4: Model ensembling (XGBoost, CatBoost, stacking)
+- [x] Phase 2: Feature engineering experiments (rejected by validation)
+- [x] Phase 3: Optuna and longer training experiments (rejected)
+- [x] Phase 4: Correct metric, cross-fitted calibration, and metric-aligned early stopping
+- [ ] Phase 5: Add a genuinely diverse model only when cross-fit improves
 
 ## License
 

@@ -1,6 +1,6 @@
 # 学生健康风险预测
 
-> [Kaggle Playground Series S6E7](https://www.kaggle.com/competitions/playground-series-s6e7) — 基于 LightGBM 的三分类基线模型
+> [Kaggle Playground Series S6E7](https://www.kaggle.com/competitions/playground-series-s6e7) — 面向 Balanced Accuracy 的 LightGBM 流水线
 
 *[English version](README.md)*
 
@@ -14,18 +14,20 @@
 | `unhealthy` | 不健康（8.4%） |
 | `at-risk` | 存在风险（85.9%） |
 
-评估指标：**accuracy**。
+官方评估指标：**balanced accuracy**（三个类别召回率的平均值）。
 
 ## 项目结构
 
 ```
 predicting_student_health_risk/
 ├── main.py                   # 入口：完整流水线（数据 → 训练 → 预测）
+├── run_experiment.py         # 可复现 CV、校正和实验产物入口
 ├── resubmit.py               # 快速重新提交（跳过训练，仅加载已有模型预测）
 ├── src/
 │   ├── config.py             # 全局配置：路径、超参、特征列表、smoke test 开关
 │   ├── data.py               # 数据加载与预处理（标签编码、类别特征编码）
 │   ├── train.py              # 5折 StratifiedKFold 交叉验证 + 全量模型训练
+│   ├── calibration.py        # 折外交叉决策校正
 │   └── predict.py            # 集成预测与提交文件生成
 ├── specs/                    # 方案文档
 │   ├── phase1-lightgbm-baseline.md
@@ -60,14 +62,21 @@ pip install pandas numpy lightgbm scikit-learn
 
 ### 运行
 
-**完整流水线**（训练 + 预测）：
+**当前最佳流水线**（训练 + 预测）：
 ```bash
 python main.py
 ```
 
+**命名实验**：
+```bash
+python run_experiment.py --name my_run --iterations 1500 \
+  --weight-power 1 --model-seed 2026 \
+  --early-stop-metric balanced_accuracy
+```
+
 **快速验证**（10% 数据、减少轮数 — 用于快速迭代）：
 ```bash
-python main.py --smoke
+python run_experiment.py --name smoke_run --smoke --iterations 100
 ```
 
 **重新提交**（跳过训练，复用已有模型）：
@@ -78,7 +87,8 @@ python resubmit.py
 ### 输出
 
 - 训练好的模型保存在 `models/lgb_fold{1..5}.pkl` 和 `models/lgb_full.pkl`
-- 提交文件保存在 `submissions/submission_phase1_v1.csv`
+- 模型、OOF、测试概率和指标保存在 `artifacts/<name>/`
+- 原始及校正提交保存在 `submissions/`
 
 ## 模型
 
@@ -87,8 +97,8 @@ python resubmit.py
 | 算法 | LightGBM (GBDT) |
 | 交叉验证策略 | 5折 StratifiedKFold |
 | 类别权重 | Balanced |
-| 早停 | 50 轮（监控 val logloss） |
-| 最大轮数 | 1,000 |
+| 早停 | 100 轮（监控验证集 balanced accuracy） |
+| 最大轮数 | 1,500 |
 | 学习率 | 0.05 |
 
 ### 为什么选择 LightGBM
@@ -98,29 +108,23 @@ python resubmit.py
 - **训练速度快** — 约 70 万行数据在 CPU 上几分钟内完成
 - **类别权重** — 直接处理严重的类别不均衡问题
 
-## 交叉验证结果（Phase 1 基线）
+## 已验证结果
 
 | 指标 | 值 |
 |------|-----|
-| CV Accuracy（均值 ± 标准差） | ~0.9469 |
-| OOF Accuracy | ~0.9469 |
-| OOF LogLoss | ~0.1643 |
-| Public LB Score | ~0.9487 |
+| 原始 Public Score | 0.94868 |
+| 最佳 OOF Balanced Accuracy | 0.94980 |
+| 最佳 Public Score | **0.95011** |
+
+完整实验历史和被否决方案见 [RESULTS.md](RESULTS.md)。
 
 ## 路线图
 
 - [x] Phase 1：LightGBM 基线
-  - [x] 数据加载与预处理
-  - [x] 5折 StratifiedKFold 交叉验证
-  - [x] 全量模型训练
-  - [x] Kaggle 提交
-- [ ] Phase 2：特征工程
-  - [ ] 缺失值指示器
-  - [ ] 交叉特征 / 组合特征
-  - [ ] 目标编码
-  - [ ] 异常值裁剪
-- [ ] Phase 3：超参数调优（Optuna）
-- [ ] Phase 4：模型集成（XGBoost、CatBoost、Stacking）
+- [x] Phase 2：特征工程实验（验证后否决）
+- [x] Phase 3：Optuna 和增加轮数实验（验证后否决）
+- [x] Phase 4：修正指标、折外校正和指标一致的早停
+- [ ] Phase 5：仅在 cross-fit 提升时引入真正不同的模型
 
 ## 许可证
 

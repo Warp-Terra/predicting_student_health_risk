@@ -1,5 +1,7 @@
 # Phase 3: 模型优化
 
+> 历史方案：Optuna 和早停使用了错误的模型选择指标。当前 Balanced Accuracy 方案见 `RESULTS.md`。
+
 ## 回顾
 
 | 阶段 | 方案 | CV Accuracy | Public Score |

@@ -5,7 +5,7 @@ import warnings
 import lightgbm as lgb
 import numpy as np
 from catboost import CatBoostClassifier
-from sklearn.metrics import accuracy_score, log_loss
+from sklearn.metrics import balanced_accuracy_score, log_loss
 from sklearn.model_selection import StratifiedKFold
 from sklearn.utils.class_weight import compute_class_weight
 
@@ -25,6 +25,15 @@ from src.config import (
 warnings.filterwarnings("ignore", category=UserWarning, module="lightgbm")
 
 
+def _balanced_accuracy_eval(probabilities, dataset):
+    if probabilities.ndim == 1:
+        probabilities = probabilities.reshape(3, -1).T
+    score = balanced_accuracy_score(
+        dataset.get_label(), np.argmax(probabilities, axis=1)
+    )
+    return "balanced_accuracy", score, True
+
+
 def _get_sample_weight(y):
     classes = np.unique(y)
     weights = compute_class_weight("balanced", classes=classes, y=y)
@@ -35,9 +44,11 @@ def _get_sample_weight(y):
 def train_cv_lgb(X_train, y_train, cat_features, params=None):
     if params is None:
         params = dict(LGB_PARAMS)
+    params = dict(params)
+    params["metric"] = "None"
 
     if SMOKE_TEST:
-        n_folds = 2
+        n_folds = N_FOLDS
         n_boost = 100
         early_stop = 10
     else:
@@ -70,6 +81,7 @@ def train_cv_lgb(X_train, y_train, cat_features, params=None):
             num_boost_round=n_boost,
             valid_sets=[dtrain, dval],
             valid_names=["train", "val"],
+            feval=_balanced_accuracy_eval,
             callbacks=[
                 lgb.early_stopping(stopping_rounds=early_stop, verbose=False),
                 lgb.log_evaluation(period=LOG_PERIOD),
@@ -80,19 +92,19 @@ def train_cv_lgb(X_train, y_train, cat_features, params=None):
         oof_preds[val_idx] = val_pred
 
         val_pred_label = np.argmax(val_pred, axis=1)
-        acc = accuracy_score(y_val, val_pred_label)
+        acc = balanced_accuracy_score(y_val, val_pred_label)
         scores.append(acc)
         elapsed = time.time() - t0
         elapsed_per_fold.append(elapsed)
-        print(f"  Fold {fold + 1} | Acc: {acc:.5f} | {elapsed:.1f}s", flush=True)
+        print(f"  Fold {fold + 1} | Balanced Acc: {acc:.5f} | {elapsed:.1f}s", flush=True)
 
         model_path = MODEL_DIR / f"lgb_fold{fold + 1}.pkl"
         with open(model_path, "wb") as f:
             pickle.dump(model, f)
 
-    oof_acc = accuracy_score(oof_labels, np.argmax(oof_preds, axis=1))
+    oof_acc = balanced_accuracy_score(oof_labels, np.argmax(oof_preds, axis=1))
     oof_ll = log_loss(oof_labels, oof_preds)
-    print(f"\n  LGB CV: Acc {np.mean(scores):.5f} ± {np.std(scores):.5f} | OOF {oof_acc:.5f} | Avg {np.mean(elapsed_per_fold):.0f}s/fold", flush=True)
+    print(f"\n  LGB CV: Balanced Acc {np.mean(scores):.5f} ± {np.std(scores):.5f} | OOF {oof_acc:.5f} | Avg {np.mean(elapsed_per_fold):.0f}s/fold", flush=True)
 
     return oof_preds
 
@@ -102,7 +114,7 @@ def train_cv_catboost(X_train, y_train, cat_features, params=None):
         params = dict(CATBOOST_PARAMS)
 
     if SMOKE_TEST:
-        n_folds = 2
+        n_folds = N_FOLDS
         n_boost = 100
         early_stop = 10
     else:
@@ -147,19 +159,19 @@ def train_cv_catboost(X_train, y_train, cat_features, params=None):
         oof_preds[val_idx] = val_pred
 
         val_pred_label = np.argmax(val_pred, axis=1)
-        acc = accuracy_score(y_val, val_pred_label)
+        acc = balanced_accuracy_score(y_val, val_pred_label)
         scores.append(acc)
         elapsed = time.time() - t0
         elapsed_per_fold.append(elapsed)
-        print(f"  Fold {fold + 1} | Acc: {acc:.5f} | {elapsed:.1f}s", flush=True)
+        print(f"  Fold {fold + 1} | Balanced Acc: {acc:.5f} | {elapsed:.1f}s", flush=True)
 
         model_path = MODEL_DIR / f"cb_fold{fold + 1}.pkl"
         with open(model_path, "wb") as f:
             pickle.dump(model, f)
 
-    oof_acc = accuracy_score(oof_labels, np.argmax(oof_preds, axis=1))
+    oof_acc = balanced_accuracy_score(oof_labels, np.argmax(oof_preds, axis=1))
     oof_ll = log_loss(oof_labels, oof_preds)
-    print(f"\n  CB CV:  Acc {np.mean(scores):.5f} ± {np.std(scores):.5f} | OOF {oof_acc:.5f} | Avg {np.mean(elapsed_per_fold):.0f}s/fold", flush=True)
+    print(f"\n  CB CV:  Balanced Acc {np.mean(scores):.5f} ± {np.std(scores):.5f} | OOF {oof_acc:.5f} | Avg {np.mean(elapsed_per_fold):.0f}s/fold", flush=True)
 
     return oof_preds
 

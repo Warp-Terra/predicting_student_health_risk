@@ -1,5 +1,7 @@
 # Phase 2: 特征工程
 
+> 历史方案：本阶段按普通 accuracy 选择特征，与竞赛官方 Balanced Accuracy 不一致，实验结论仅供追溯。
+
 ## 目标
 
 在不改动模型架构的前提下，通过构造衍生特征提升数据质量，使 5-fold CV Accuracy 和 Kaggle Public Score 获得提升。

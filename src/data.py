@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from sklearn.model_selection import StratifiedKFold
 
 from src.config import (
     TRAIN_PATH,
@@ -17,6 +18,8 @@ from src.config import (
     OUTLIER_LOW,
     OUTLIER_HIGH,
     TARGET_ENCODING_SMOOTH,
+    N_FOLDS,
+    SEED,
     SMOKE_TEST,
 )
 
@@ -81,24 +84,52 @@ def _add_cross_features(train, test):
 def _encode_categorical(train, test, extra_categorical):
     all_cat = CATEGORICAL_FEATURES + extra_categorical
     for col in all_cat:
-        train[col] = train[col].astype(str).replace("nan", "missing")
-        test[col] = test[col].astype(str).replace("nan", "missing")
-        train[col] = train[col].astype("category")
-        test[col] = test[col].astype("category")
-        train[col] = train[col].cat.codes
-        test[col] = test[col].cat.codes
+        train_values = train[col].astype("string").fillna("missing")
+        test_values = test[col].astype("string").fillna("missing")
+        categories = sorted(set(train_values).union(test_values))
+        dtype = pd.CategoricalDtype(categories=categories)
+        train[col] = train_values.astype(dtype).cat.codes
+        test[col] = test_values.astype(dtype).cat.codes
     return all_cat
 
 
 def _add_target_encoding(train, test, y_train):
     print("  [FE] Adding target encoding ...", flush=True)
-    global_mean = y_train.mean()
+    splitter = StratifiedKFold(n_splits=N_FOLDS, shuffle=True, random_state=SEED)
     for col in CATEGORICAL_FEATURES:
-        agg = train.groupby(col)[TARGET].agg(["sum", "count"])
-        smoothed = (agg["sum"] + global_mean * TARGET_ENCODING_SMOOTH) / (agg["count"] + TARGET_ENCODING_SMOOTH)
-        mapping = smoothed.to_dict()
-        train[f"{col}_te"] = train[col].map(mapping).fillna(global_mean)
-        test[f"{col}_te"] = test[col].map(mapping).fillna(global_mean)
+        for class_index in sorted(y_train.unique()):
+            binary_target = (y_train == class_index).astype(float)
+            global_mean = binary_target.mean()
+            encoded_train = np.full(len(train), global_mean, dtype=float)
+            encoded_test = np.zeros(len(test), dtype=float)
+
+            for fit_indices, valid_indices in splitter.split(train, y_train):
+                fit_frame = pd.DataFrame(
+                    {
+                        "category": train.iloc[fit_indices][col].to_numpy(),
+                        "target": binary_target.iloc[fit_indices].to_numpy(),
+                    }
+                )
+                aggregate = fit_frame.groupby("category")["target"].agg(
+                    ["sum", "count"]
+                )
+                smoothed = (
+                    aggregate["sum"] + global_mean * TARGET_ENCODING_SMOOTH
+                ) / (aggregate["count"] + TARGET_ENCODING_SMOOTH)
+                mapping = smoothed.to_dict()
+                encoded_train[valid_indices] = (
+                    train.iloc[valid_indices][col]
+                    .map(mapping)
+                    .fillna(global_mean)
+                    .to_numpy()
+                )
+                encoded_test += (
+                    test[col].map(mapping).fillna(global_mean).to_numpy()
+                    / N_FOLDS
+                )
+
+            train[f"{col}_te_{class_index}"] = encoded_train
+            test[f"{col}_te_{class_index}"] = encoded_test
     return train, test
 
 

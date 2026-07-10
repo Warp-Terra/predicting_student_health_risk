@@ -1,5 +1,5 @@
 import numpy as np
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import balanced_accuracy_score
 
 
 def blend_oof(oof_preds_list, y_train):
@@ -21,13 +21,13 @@ def blend_oof(oof_preds_list, y_train):
             for preds, w in zip(oof_preds_list, weights):
                 blended += w * preds
 
-            acc = accuracy_score(y_train, np.argmax(blended, axis=1))
+            acc = balanced_accuracy_score(y_train, np.argmax(blended, axis=1))
             if acc > best_acc:
                 best_acc = acc
                 best_weights = weights
 
     print(f"  Best blend weights: {[f'{w:.2f}' for w in best_weights]}", flush=True)
-    print(f"  Best blend OOF Accuracy: {best_acc:.5f}", flush=True)
+    print(f"  Best blend OOF Balanced Accuracy: {best_acc:.5f}", flush=True)
     return best_weights
 
 

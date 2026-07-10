@@ -16,13 +16,11 @@ data/*.csv
 data/*.zip
 
 models/*.pkl
+artifacts/
 
 submissions/*.csv
 
 catboost_info/
-
-resubmit.py
-test_features.py
 
 .env
 .env.*

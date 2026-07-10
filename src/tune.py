@@ -3,7 +3,7 @@ import optuna
 import warnings
 
 import lightgbm as lgb
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import balanced_accuracy_score
 from sklearn.model_selection import StratifiedKFold
 from sklearn.utils.class_weight import compute_class_weight
 
@@ -19,6 +19,15 @@ from src.config import (
 
 warnings.filterwarnings("ignore", category=UserWarning, module="lightgbm")
 optuna.logging.set_verbosity(optuna.logging.WARNING)
+
+
+def _balanced_accuracy_eval(probabilities, dataset):
+    if probabilities.ndim == 1:
+        probabilities = probabilities.reshape(3, -1).T
+    score = balanced_accuracy_score(
+        dataset.get_label(), np.argmax(probabilities, axis=1)
+    )
+    return "balanced_accuracy", score, True
 
 
 def _get_sample_weight(y):
@@ -41,10 +50,11 @@ def objective(trial, X_train, y_train):
         "bagging_freq": trial.suggest_int("bagging_freq", 1, 10),
         "random_state": SEED,
         "n_jobs": -1,
+        "metric": "None",
     }
 
     n_boost = 1000 if not SMOKE_TEST else 100
-    n_folds = N_FOLDS if not SMOKE_TEST else 2
+    n_folds = N_FOLDS
     early_stop = EARLY_STOPPING_ROUNDS
 
     skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=SEED)
@@ -65,6 +75,7 @@ def objective(trial, X_train, y_train):
             num_boost_round=n_boost,
             valid_sets=[dval],
             valid_names=["val"],
+            feval=_balanced_accuracy_eval,
             callbacks=[
                 lgb.early_stopping(stopping_rounds=early_stop, verbose=False),
             ],
@@ -72,7 +83,7 @@ def objective(trial, X_train, y_train):
 
         val_pred = model.predict(X_val)
         val_pred_label = np.argmax(val_pred, axis=1)
-        acc = accuracy_score(y_val, val_pred_label)
+        acc = balanced_accuracy_score(y_val, val_pred_label)
         scores.append(acc)
 
     return np.mean(scores)
