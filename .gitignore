@@ -19,6 +19,11 @@ models/*.pkl
 
 submissions/*.csv
 
+catboost_info/
+
+resubmit.py
+test_features.py
+
 .env
 .env.*
 
